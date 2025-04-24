@@ -30,11 +30,15 @@ export class UserService {
     if (R.isNil(adminPass) || adminPass !== this.ADMIN_PASS) {
       throw new UnauthorizedException('Admin singup failed!');
     }
- 
+
     /**
      * @todo Check if email already exists.
      */
-    const createdUser = new this.userModel({ email, passHash, role: UserRole.User });
+    const createdUser = new this.userModel({
+      email,
+      passHash,
+      role: UserRole.User,
+    });
     const userdDataInDb = await createdUser.save();
     const { _id: userId } = userdDataInDb;
 
@@ -48,28 +52,35 @@ export class UserService {
     /**
      * @todo Check if email already exists.
      */
-    const createdUser = new this.userModel({ email, passHash, role: UserRole.User });
+    const createdUser = new this.userModel({
+      email,
+      passHash,
+      role: UserRole.User,
+    });
     const userdDataInDb = await createdUser.save();
     const { _id: userId } = userdDataInDb;
 
     return { userId };
   }
 
+  async getUser(query: Record<string, any>): Promise<UserDocument> {
+    const userDataInDb = (await this.userModel.findOne(query)) as UserDocument;
+
+    return userDataInDb;
+  }
+
   async login(request: CreateUserDto) {
     const { email, password } = request;
 
-    const userDataInDb = (await this.userModel
-      .findOne({ email })
-      .exec()) as UserDocument;
-
+    const userDataInDb = await this.getUser({ email });
     console.log('user data in db: ', userDataInDb);
-
-    const { _id: userId } = userDataInDb;
-    const { passHash } = userDataInDb;
 
     if (R.isNil(userDataInDb)) {
       throw new NotFoundException('Sorry, email does not exist!');
     }
+
+    const { _id: userId } = userDataInDb;
+    const { passHash } = userDataInDb;
 
     const passwordMatch = compareSync(password, passHash);
 
@@ -78,6 +89,23 @@ export class UserService {
     }
 
     return { userId };
+  }
+
+  async getUsers(emailList: Array<string>) {
+    const allUsersDataInDb = await this.userModel.find();
+
+    const userDataInDbList = R.filter((userDataItemInDb: UserDocument) => {
+      const emailInDb = R.prop('email', userDataItemInDb);
+      const userDataInDb = R.find((emailItem: string) =>
+        R.equals(emailItem, emailInDb),
+      )(emailList);
+
+      return R.isNil(userDataInDb) ? false : true;
+    }, allUsersDataInDb);
+
+    console.log('user data in db: ', userDataInDbList);
+
+    return userDataInDbList;
   }
 
   /**
