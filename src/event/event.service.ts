@@ -5,7 +5,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { DateTime } from 'luxon';
 import * as R from 'ramda';
 import { Event, EventDocument } from './schemas/event.schema';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { UserService } from 'src/user/user.service';
 import { UserDocument, UserRole } from 'src/user/schemas/user.schema';
 
@@ -16,16 +16,22 @@ export class EventService {
     private userService: UserService,
   ) {}
 
-  async create(createEventDto: CreateEventDto) {
-    const { title, description, startTime, endTime, pariticipants, userId } =
+  async create(userId: string, createEventDto: CreateEventDto) {
+    const { title, description, startTime, endTime, pariticipants } =
       createEventDto;
 
-    const participantDataInDbList =
-      await this.userService.getUsers(pariticipants);
-    const createdByUserDataInDb = await this.userService.getUser({
-      _id: userId,
-    });
-    // const pariticipantIdInDbList = R.pluck('_id', pariticipantDataInDbList);
+    /**
+     * @todo Consider when given participant email does not exist in DB.
+     */
+    const participantDataInDbList = await this.userService.getUsers(
+      'email',
+      pariticipants,
+    );
+    const participantIdInDbList = R.pluck('_id', participantDataInDbList);
+
+    // const { _id: eventCreatorId } = await this.userService.getUser({
+    //   _id: userId,
+    // });
 
     /**
      * @todo Handle case event orgainzer is by default event participant
@@ -35,14 +41,16 @@ export class EventService {
       description,
       startTime: DateTime.fromISO(startTime).toJSDate(),
       endTime: DateTime.fromISO(endTime).toJSDate(),
-      participants: participantDataInDbList,
-      createdBy: createdByUserDataInDb,
+      participants: participantIdInDbList,
+      createdBy: userId,
       createdAt: DateTime.now().toJSDate(),
     });
 
     const eventDataInDb = await createdEvent.save();
 
-    return eventDataInDb;
+    return {
+      success: true,
+    };
   }
 
   findAll() {
@@ -50,7 +58,10 @@ export class EventService {
   }
 
   async getEvent(query: Record<string, any>) {
-    const eventDataInDb = await this.eventModel.findOne(query).exec();
+    const eventDataInDb = await this.eventModel
+      .findOne(query)
+      .populate(['createdBy', 'participants'])
+      .exec();
 
     return eventDataInDb;
   }
@@ -61,8 +72,14 @@ export class EventService {
     eventDataInDb: EventDocument,
   ) {
     const { participants: participantDataInDbList } = eventDataInDb;
+    // const participantDataInDbList = await this.userService.getUsers(
+    //   '_id',
+    //   participantIdInDbList,
+    // );
 
     let updatedParticipantList = participantDataInDbList;
+
+    console.log('Before reject: ', updatedParticipantList);
 
     if (R.isNotNil(pariticipantsToRemove)) {
       updatedParticipantList = R.reject(
@@ -79,8 +96,11 @@ export class EventService {
       )(participantDataInDbList);
     }
 
+    console.log('After reject: ', updatedParticipantList);
+
     if (R.isNotNil(newParticipants)) {
       const newParticipantDataInDbList = await this.userService.getUsers(
+        'email',
         newParticipants || [],
       );
 
@@ -93,18 +113,25 @@ export class EventService {
     return updatedParticipantList;
   }
 
-  async update(eventId: string, updateEventDto: UpdateEventDto) {
+  async update(
+    userId: string,
+    eventId: string,
+    updateEventDto: UpdateEventDto,
+  ) {
     const eventDataInDb = (await this.getEvent({
       _id: eventId,
     })) as EventDocument;
 
-    const { userId } = updateEventDto;
-    const userData = (await this.userService.getUser({
+    const { email, role: userRole } = (await this.userService.getUser({
       _id: userId,
     })) as UserDocument;
 
-    const { role: userRole } = userData;
-    if (userRole !== UserRole.Admin && userId !== eventDataInDb.createdBy) {
+    const { _id: eventCreatorId } = eventDataInDb.createdBy as UserDocument;
+
+    console.log('User email: ', email);
+    console.log('Creator email: ', eventDataInDb.createdBy);
+
+    if (userRole !== UserRole.Admin && userId !== eventCreatorId.toString()) {
       throw new UnauthorizedException('User is not allowed to update event!');
     }
 
@@ -121,12 +148,37 @@ export class EventService {
       R.assoc('participants', updatedParticipants),
     )(updateEventDto);
 
-    const udpatedEventData = R.mergeRight(eventDataInDb, coreUpdateEventData);
+    // const udpatedEventData = R.mergeRight(eventDataInDb, coreUpdateEventData);
 
-    return udpatedEventData.save();
+    await this.eventModel.updateOne({ _id: eventId }, coreUpdateEventData);
+
+    return {
+      success: true,
+    };
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} event`;
+  async remove(userId: string, eventId: string) {
+    const eventDataInDb = (await this.getEvent({
+      _id: eventId,
+    })) as EventDocument;
+
+    const { email, role: userRole } = (await this.userService.getUser({
+      _id: userId,
+    })) as UserDocument;
+
+    if (
+      userRole !== UserRole.Admin &&
+      email !== eventDataInDb.createdBy.email
+    ) {
+      throw new UnauthorizedException('User is not allowed to update event!');
+    }
+
+    await this.eventModel.deleteOne({
+      _id: eventId,
+    });
+
+    return {
+      success: true,
+    };
   }
 }
