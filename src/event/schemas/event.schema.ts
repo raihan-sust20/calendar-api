@@ -18,11 +18,11 @@ export class Event {
   @Prop()
   endTime: Date;
 
-  @Prop()
-  createdBy: string;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
+  createdBy: User;
 
-  @Prop()
-  participants: Array<string>;
+  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
+  participants: User[];
 
   @Prop()
   createdAt: Date;

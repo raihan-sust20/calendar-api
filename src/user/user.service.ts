@@ -8,7 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as R from 'ramda';
 import * as RA from 'ramda-adjunct';
 import { User, UserDocument, UserRole } from './schemas/user.schema';
-import { Model } from 'mongoose';
+import mongoose, { Model } from 'mongoose';
 import { hashSync, compareSync } from 'bcryptjs';
 import { CreateAdminDto } from './dtos/create-admin.dto';
 import { ConfigService } from '@nestjs/config';
@@ -37,7 +37,7 @@ export class UserService {
     const createdUser = new this.userModel({
       email,
       passHash,
-      role: UserRole.User,
+      role: UserRole.Admin,
     });
     const userdDataInDb = await createdUser.save();
     const { _id: userId } = userdDataInDb;
@@ -91,14 +91,18 @@ export class UserService {
     return { userId };
   }
 
-  async getUsers(emailList: Array<string>) {
+  async getUsers(
+    propKey: string,
+    propValueList: Array<string> | Array<mongoose.Schema.Types.ObjectId>,
+  ) {
     const allUsersDataInDb = await this.userModel.find();
 
     const userDataInDbList = R.filter((userDataItemInDb: UserDocument) => {
-      const emailInDb = R.prop('email', userDataItemInDb);
-      const userDataInDb = R.find((emailItem: string) =>
-        R.equals(emailItem, emailInDb),
-      )(emailList);
+      const propValueInDb = R.prop(propKey, userDataItemInDb);
+      const userDataInDb = R.find(
+        (propValueItem: string | mongoose.Schema.Types.ObjectId) =>
+          R.equals(propValueItem, propValueInDb),
+      )(propValueList);
 
       return R.isNil(userDataInDb) ? false : true;
     }, allUsersDataInDb);

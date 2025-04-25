@@ -1,34 +1,80 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Put,
+  Headers,
+} from '@nestjs/common';
 import { EventService } from './event.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
+import { ApiHeader } from '@nestjs/swagger';
 
 @Controller('event')
 export class EventController {
   constructor(private readonly eventService: EventService) {}
 
+  @ApiHeader({
+    name: 'Authorizatoin',
+    required: true,
+    description: 'Please include `userId` here',
+  })
   @Post()
-  create(@Body() createEventDto: CreateEventDto) {
-    return this.eventService.create(createEventDto);
+  create(
+    @Body() createEventDto: CreateEventDto,
+    @Headers('Authorizatoin') authorization: string,
+  ) {
+    return this.eventService.create(authorization, createEventDto);
   }
 
+  // @ApiHeader({
+  //   name: 'Authorizatoin',
+  //   required: true,
+  //   description: 'Please include `userId` here'
+  // })
   @Get()
   findAll() {
     return this.eventService.findAll();
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.eventService.findOne(+id);
-  }
+  // @ApiHeader({
+  //   name: 'Authorizatoin',
+  //   required: true,
+  //   description: 'Please include `userId` here'
+  // })
+  // @Get(':id')
+  // findOne(@Param('id') id: string) {
+  //   return this.eventService.findOne(+id);
+  // }
 
+  @ApiHeader({
+    name: 'Authorizatoin',
+    required: true,
+    description: 'Please include `userId` here',
+  })
   @Put(':eventId')
-  update(@Param('eventId') eventId: string, @Body() updateEventDto: UpdateEventDto) {
-    return this.eventService.update(eventId, updateEventDto);
+  update(
+    @Param('eventId') eventId: string,
+    @Body() updateEventDto: UpdateEventDto,
+    @Headers('Authorizatoin') authorization: string,
+  ) {
+    return this.eventService.update(authorization, eventId, updateEventDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.eventService.remove(+id);
+  @ApiHeader({
+    name: 'Authorizatoin',
+    required: true,
+    description: 'Please include `userId` here',
+  })
+  @Delete(':eventId')
+  remove(
+    @Param('eventId') eventId: string,
+    @Headers('Authorizatoin') authorization: string,
+  ) {
+    return this.eventService.remove(authorization, eventId);
   }
 }
