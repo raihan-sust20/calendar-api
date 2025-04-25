@@ -42,9 +42,9 @@ export class EventController {
     description:
       'Last date to show event recurrences. Please use format: `dd-mm-yyyy`',
   })
-  @Get('myevents')
-  getEvents(@Headers('Authorizatoin') authorization: string) {
-    return this.eventService.findAll();
+  @Get('myevents/:endDate')
+  getEvents(@Headers('Authorizatoin') authorization: string, @Param('endDate') endDate: string) {
+    return this.eventService.getEvents({ createdBy: authorization });
   }
 
   // @ApiHeader({

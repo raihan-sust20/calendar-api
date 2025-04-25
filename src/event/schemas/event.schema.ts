@@ -27,10 +27,10 @@ export class Event {
   description: string;
 
   @Prop()
-  startTime: Date;
+  startTime: string;
 
   @Prop()
-  endTime: Date;
+  endTime: string;
 
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User' })
   createdBy: User;
@@ -38,17 +38,17 @@ export class Event {
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
   participants: User[];
 
-  // @Prop({ type: RecurrenceType })
-  // recurrence: RecurrenceType;
+  @Prop({ type: RecurrenceType })
+  recurrence: RecurrenceType;
 
-  // @Prop({ type: Array<IEventUpdateData> })
-  // updates: Array<IEventUpdateData>
+  @Prop({ type: Array<IEventUpdateData> })
+  updates: Array<IEventUpdateData>
   
   @Prop()
-  createdAt: Date;
+  createdAt: string;
 
   @Prop()
-  updatedAt: Date;
+  updatedAt: string;
 }
 
 export const EventSchema = SchemaFactory.createForClass(Event);

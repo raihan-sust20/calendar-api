@@ -4,10 +4,12 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { DateTime } from 'luxon';
 import * as R from 'ramda';
-import { Event, EventDocument } from './schemas/event.schema';
+import { Event, EventDocument, RecurrenceType } from './schemas/event.schema';
 import mongoose, { Model } from 'mongoose';
 import { UserService } from 'src/user/user.service';
 import { UserDocument, UserRole } from 'src/user/schemas/user.schema';
+import { add, isAfter, parse, parseISO } from 'date-fns';
+import { recurrenceToDayCount, recurrenceTypeToDay } from './event.constant';
 
 @Injectable()
 export class EventService {
@@ -28,7 +30,6 @@ export class EventService {
       pariticipants,
     );
     const participantIdInDbList = R.pluck('_id', participantDataInDbList);
-  
 
     /**
      * @todo Handle case event orgainzer is by default event participant
@@ -36,22 +37,68 @@ export class EventService {
     const createdEvent = new this.eventModel({
       title,
       description,
-      startTime: DateTime.fromISO(startTime).toJSDate(),
-      endTime: DateTime.fromISO(endTime).toJSDate(),
+      startTime,
+      endTime,
       participants: participantIdInDbList,
       createdBy: userId,
-      createdAt: DateTime.now().toJSDate(),
+      createdAt: DateTime.now().toISO(),
+      updatedAt: DateTime.now().toISO(),
     });
 
-    const eventDataInDb = await createdEvent.save();
+    await createdEvent.save();
 
     return {
       success: true,
     };
   }
 
-  findAll() {
-    return `This action returns all event`;
+  getEventOccurence(eventDataInDb: EventDocument, endDateStr: string) {
+    const { startTime: eventStartTime } = eventDataInDb;
+    const endDate = parse(endDateStr, 'dd-MM-yyyy', new Date());
+    const {
+      title,
+      description,
+      createdBy,
+      participants,
+      startTime,
+      endTime,
+      recurrence,
+    } = eventDataInDb;
+    let eventOccurence = [
+      {
+        title,
+        description,
+        createdBy,
+        participants,
+        startTime,
+        endTime,
+        recurrence,
+      },
+    ];
+
+    let eventDatePassedEndDate = false;
+    while (eventDatePassedEndDate) {
+      const nextEventStartTime = add(parseISO(startTime), {
+        days: recurrenceTypeToDay[recurrence],
+      }).toISOString();
+      const nextEventEndTime = add(parseISO(startTime), {
+        days: recurrenceTypeToDay[recurrence],
+      }).toISOString();
+
+      const nextEventStartDate = add(parseISO(startTime), {
+        days: recurrenceTypeToDay[recurrence],
+      });
+      eventDatePassedEndDate = isAfter(nextEventStartDate, endDate);
+    }
+  }
+
+  async getEvents(query: Record<string, any>, endDate: string) {
+    const eventDataInDb = await this.eventModel
+      .find(query)
+      .populate(['createdBy', 'participants'])
+      .exec();
+
+    return eventDataInDb;
   }
 
   async getEvent(query: Record<string, any>) {
