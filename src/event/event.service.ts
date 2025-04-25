@@ -28,10 +28,7 @@ export class EventService {
       pariticipants,
     );
     const participantIdInDbList = R.pluck('_id', participantDataInDbList);
-
-    // const { _id: eventCreatorId } = await this.userService.getUser({
-    //   _id: userId,
-    // });
+  
 
     /**
      * @todo Handle case event orgainzer is by default event participant
@@ -72,10 +69,6 @@ export class EventService {
     eventDataInDb: EventDocument,
   ) {
     const { participants: participantDataInDbList } = eventDataInDb;
-    // const participantDataInDbList = await this.userService.getUsers(
-    //   '_id',
-    //   participantIdInDbList,
-    // );
 
     let updatedParticipantList = participantDataInDbList;
 
@@ -128,8 +121,10 @@ export class EventService {
 
     const { _id: eventCreatorId } = eventDataInDb.createdBy as UserDocument;
 
-    console.log('User email: ', email);
-    console.log('Creator email: ', eventDataInDb.createdBy);
+    /**
+     * @todo userId/eventId may not exist in DB casuing 500 error. Use try/catch
+     * to handle.
+     */
 
     if (userRole !== UserRole.Admin && userId !== eventCreatorId.toString()) {
       throw new UnauthorizedException('User is not allowed to update event!');
@@ -148,8 +143,6 @@ export class EventService {
       R.assoc('participants', updatedParticipants),
     )(updateEventDto);
 
-    // const udpatedEventData = R.mergeRight(eventDataInDb, coreUpdateEventData);
-
     await this.eventModel.updateOne({ _id: eventId }, coreUpdateEventData);
 
     return {
@@ -166,11 +159,15 @@ export class EventService {
       _id: userId,
     })) as UserDocument;
 
-    if (
-      userRole !== UserRole.Admin &&
-      email !== eventDataInDb.createdBy.email
-    ) {
-      throw new UnauthorizedException('User is not allowed to update event!');
+    const { _id: eventCreatorId } = eventDataInDb.createdBy as UserDocument;
+
+    /**
+     * @todo userId/eventId may not exist in DB casuing 500 error. Use try/catch
+     * to handle.
+     */
+
+    if (userRole !== UserRole.Admin && userId !== eventCreatorId.toString()) {
+      throw new UnauthorizedException('User is not allowed to delete event!');
     }
 
     await this.eventModel.deleteOne({

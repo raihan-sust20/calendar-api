@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsISO8601, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsISO8601, IsNotEmpty, IsString } from 'class-validator';
+import { RecurrenceType } from '../schemas/event.schema';
 
 export class CreateEventDto {
   @ApiProperty()
@@ -27,4 +28,15 @@ export class CreateEventDto {
   @ApiProperty()
   @IsNotEmpty()
   pariticipants: Array<string>;
+
+  @ApiProperty({
+    enum: [
+      RecurrenceType.None,
+      RecurrenceType.Daily,
+      RecurrenceType.Weekly,
+      RecurrenceType.Monthly,
+    ],
+  })
+  @IsEnum(RecurrenceType)
+  recurrence: RecurrenceType;
 }

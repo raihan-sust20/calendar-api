@@ -12,7 +12,7 @@ import {
 import { EventService } from './event.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
-import { ApiHeader } from '@nestjs/swagger';
+import { ApiHeader, ApiParam } from '@nestjs/swagger';
 
 @Controller('event')
 export class EventController {
@@ -31,13 +31,19 @@ export class EventController {
     return this.eventService.create(authorization, createEventDto);
   }
 
-  // @ApiHeader({
-  //   name: 'Authorizatoin',
-  //   required: true,
-  //   description: 'Please include `userId` here'
-  // })
-  @Get()
-  findAll() {
+  @ApiHeader({
+    name: 'Authorizatoin',
+    required: true,
+    description: 'Please include `userId` here',
+  })
+  @ApiParam({
+    name: 'endDate',
+    required: true,
+    description:
+      'Last date to show event recurrences. Please use format: `dd-mm-yyyy`',
+  })
+  @Get('myevents')
+  getEvents(@Headers('Authorizatoin') authorization: string) {
     return this.eventService.findAll();
   }
 
