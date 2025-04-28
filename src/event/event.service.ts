@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { InjectModel } from '@nestjs/mongoose';
@@ -332,7 +336,13 @@ export class EventService {
       ]),
       R.assoc('index', 0),
     )(eventDataInDb);
-    let eventInstanceList = [firstEventInstance];
+
+    const updatedFirstEventInstance = await this.executeEventUpdates(
+      userListInDb,
+      eventDataInDb,
+      firstEventInstance,
+    );
+    let eventInstanceList = [updatedFirstEventInstance];
 
     let lastEventTimeExceeded = false;
     let prevEventStartTime = startTime;
@@ -457,10 +467,11 @@ export class EventService {
         newParticipants || [],
       );
 
-      updatedParticipantList = R.concat(
-        updatedParticipantList,
-        newParticipantDataInDbList,
-      );
+      updatedParticipantList = R.pipe(
+        R.concat(updatedParticipantList),
+        // Deduplicate participant email
+        R.uniq,
+      )(newParticipantDataInDbList);
     }
 
     return updatedParticipantList;
@@ -535,61 +546,57 @@ export class EventService {
     eventInstanceIndex: number,
     updateEventDto: UpdateEventDto,
   ) {
-    const eventDataInDb = (await this.getEvent({
-      _id: eventId,
-    })) as EventDocument;
+    try {
+      const eventDataInDb = (await this.getEvent({
+        _id: eventId,
+      })) as EventDocument;
 
-    const { role: userRole } = (await this.userService.getUser({
-      _id: userId,
-    })) as UserDocument;
+      const { role: userRole } = (await this.userService.getUser({
+        _id: userId,
+      })) as UserDocument;
 
-    const eventUpdateList = R.prop('updates', eventDataInDb);
+      const eventUpdateList = R.prop('updates', eventDataInDb);
 
-    const { _id: eventCreatorId } = eventDataInDb.createdBy as UserDocument;
+      const { _id: eventCreatorId } = eventDataInDb.createdBy as UserDocument;
 
-    /**
-     * @todo userId/eventId may not exist in DB casuing 500 error. Use try/catch
-     * to handle.
-     */
+      /**
+       * @todo userId/eventId may not exist in DB casuing 500 error. Use try/catch
+       * to handle.
+       */
 
-    if (userRole !== UserRole.Admin && userId !== eventCreatorId.toString()) {
-      throw new UnauthorizedException(
-        'This user is not allowed to update event!',
+      if (userRole !== UserRole.Admin && userId !== eventCreatorId.toString()) {
+        throw new UnauthorizedException(
+          'This user is not allowed to update event!',
+        );
+      }
+
+      const newEventUpdateData = this.formatEventUpdateData(
+        eventInstanceIndex,
+        eventDataInDb,
+        updateEventDto,
+      );
+
+      const updatedEventUpdateList = R.append(
+        newEventUpdateData,
+        eventUpdateList,
+      );
+
+      await this.eventModel.updateOne(
+        { _id: eventId },
+        { updates: updatedEventUpdateList },
+      );
+
+      return {
+        success: true,
+      };
+    } catch (error: any) {
+      console.log('[Error]: ', error.message);
+      console.log(error);
+
+      throw new BadRequestException(
+        'Please confirm `eventId`, `userId` are accurate!',
       );
     }
-
-    const newEventUpdateData = this.formatEventUpdateData(
-      eventInstanceIndex,
-      eventDataInDb,
-      updateEventDto,
-    );
-
-    const updatedEventUpdateList = R.append(
-      newEventUpdateData,
-      eventUpdateList,
-    );
-
-    // const { newParticipants, participantsToRemove } = updateEventDto;
-
-    // const updatedParticipants = await this.updateEventParticipants(
-    //   newParticipants,
-    //   participantsToRemove,
-    //   eventDataInDb,
-    // );
-
-    // const coreUpdateEventData = R.pipe(
-    //   R.omit(['newParticipants', 'participantsToRemove', 'userId']),
-    //   R.assoc('participants', updatedParticipants),
-    // )(updateEventDto);
-
-    await this.eventModel.updateOne(
-      { _id: eventId },
-      { updates: updatedEventUpdateList },
-    );
-
-    return {
-      success: true,
-    };
   }
 
   async remove(userId: string, eventId: string) {
