@@ -246,7 +246,7 @@ export class EventService {
       userListInDb: Array<UserDocument>,
       eventDataInDb: EventDocument,
       eventInstanceItem: IEventInstance,
-    ): Promise<IEventInstance> => {
+    ): Promise<IEventInstance | {}> => {
       const { updates: eventUpdateDataList } = eventDataInDb;
 
       const sortedEventUpdateDataList = this.sortEventUpdateDataList(
@@ -259,14 +259,23 @@ export class EventService {
         async (
           updateEventInstanceParam: IEventInstance,
           eventUpdateDataItem: IEventUpdateData,
-        ): Promise<IEventInstance> => {
+        ): Promise<IEventInstance | {}> => {
           const { updateRecurrenceType, index: eventUpdateStartIndex } =
             eventUpdateDataItem;
 
           const { index: eventInstanceIndex } = eventInstanceItem;
 
+          // If event instance is deleted.
+          if (R.isEmpty(eventInstanceItem)) {
+            return {};
+          }
+
           if (updateRecurrenceType === UpdateRecurrenceType.ThisEvent) {
             if (eventInstanceIndex === eventUpdateStartIndex) {
+              // It means the instance is deleted.
+              if (R.isEmpty(eventUpdateDataItem.updateData)) {
+                return {};
+              }
               return this.mergeEventUpdateData(
                 userListInDb,
                 updateEventInstanceParam,
@@ -277,6 +286,9 @@ export class EventService {
 
           if (updateRecurrenceType === UpdateRecurrenceType.ThisAndFollowing) {
             if (eventInstanceIndex >= eventUpdateStartIndex) {
+              if (R.isEmpty(eventUpdateDataItem.updateData)) {
+                return {};
+              }
               return this.mergeEventUpdateData(
                 userListInDb,
                 updateEventInstanceParam,
@@ -371,7 +383,11 @@ export class EventService {
       const { startTime: currentEventStartTime, endTime: currentEventEndTime } =
         updatedEventInstance;
 
-      lastEventTimeExceeded = isAfter(currentEventStartTime, lastEventTime);
+      lastEventTimeExceeded = isAfter(
+        // In case event instance is deleted fall back to `currentEventInitialStartTime`
+        currentEventStartTime || currentEventInitialStartTime,
+        lastEventTime,
+      );
       index++;
 
       if (RA.isFalse(lastEventTimeExceeded)) {
@@ -599,12 +615,17 @@ export class EventService {
     }
   }
 
-  async remove(userId: string, eventId: string) {
+  async remove(
+    userId: string,
+    eventId: string,
+    instanceIndex: number,
+    // recurrenceType: UpdateRecurrenceType,
+  ) {
     const eventDataInDb = (await this.getEvent({
       _id: eventId,
     })) as EventDocument;
 
-    const { email, role: userRole } = (await this.userService.getUser({
+    const { role: userRole } = (await this.userService.getUser({
       _id: userId,
     })) as UserDocument;
 
@@ -619,12 +640,31 @@ export class EventService {
       throw new UnauthorizedException('User is not allowed to delete event!');
     }
 
+    // if (recurrenceType === UpdateRecurrenceType.AllEvents) {
+      
+    // }
+
     await this.eventModel.deleteOne({
       _id: eventId,
     });
 
+    const { startTime, endTime } = eventDataInDb;
+
+    await this.eventModel.updateOne(
+      { _id: eventId },
+      {
+        startTime,
+        endTime,
+        index: instanceIndex,
+        updatedAt: DateTime.utc().toISO(),
+        updateRecurrenceType: recurrenceType,
+        updateData: {},
+      },
+    );
+
     return {
       success: true,
+      message: 'Deleted intended event instance(s)',
     };
   }
 }
