@@ -94,7 +94,7 @@ export class UserService {
   async getUsers(
     propKey: string,
     propValueList: Array<string> | Array<mongoose.Schema.Types.ObjectId>,
-  ) {
+  ): Promise<Array<UserDocument>> {
     const allUsersDataInDb = await this.userModel.find();
 
     const userDataInDbList = R.filter((userDataItemInDb: UserDocument) => {

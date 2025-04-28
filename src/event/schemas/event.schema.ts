@@ -6,16 +6,10 @@ import { IEventUpdateData } from '../interfaces/event-update-data.interface';
 export type EventDocument = HydratedDocument<Event>;
 
 export enum RecurrenceType {
-  None = 'None',
+  // None = 'None',
   Daily = 'Daily',
   Weekly = 'Weekly',
   Monthly = 'Monthly',
-}
-
-export enum UpdateRecurrenceType {
-  ThisEvent = 'ThisEvent',
-  ThisAndFollowing = 'ThisAndFollowing',
-  AllEvents = 'AllEvents',
 }
 
 @Schema()
@@ -38,12 +32,12 @@ export class Event {
   @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }] })
   participants: User[];
 
-  @Prop({ type: RecurrenceType })
-  recurrence: RecurrenceType;
+  @Prop()
+  recurrence: string;
 
-  @Prop({ type: Array<IEventUpdateData> })
-  updates: Array<IEventUpdateData>
-  
+  @Prop({ type: Array<IEventUpdateData>, default: [] })
+  updates: Array<IEventUpdateData>;
+
   @Prop()
   createdAt: string;
 

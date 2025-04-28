@@ -27,11 +27,11 @@ export class CreateEventDto {
 
   @ApiProperty()
   @IsNotEmpty()
-  pariticipants: Array<string>;
+  participants: Array<string>;
 
   @ApiProperty({
     enum: [
-      RecurrenceType.None,
+      // RecurrenceType.None,
       RecurrenceType.Daily,
       RecurrenceType.Weekly,
       RecurrenceType.Monthly,

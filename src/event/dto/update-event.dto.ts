@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { CreateEventDto } from './create-event.dto';
 import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { UpdateRecurrenceType } from '../schemas/event.schema';
+import { UpdateRecurrenceType } from '../interfaces/event-update-data.interface';
+
 
 export class UpdateEventDto {
   @ApiPropertyOptional()
@@ -17,12 +18,12 @@ export class UpdateEventDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  startTime?: string;
+  newStartTime?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  endTime?: string;
+  newEndTime?: string;
 
   @ApiProperty({
     enum: [
@@ -39,5 +40,5 @@ export class UpdateEventDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  pariticipantsToRemove: Array<string>;
+  participantsToRemove: Array<string>;
 }
