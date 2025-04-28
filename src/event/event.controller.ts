@@ -13,6 +13,7 @@ import { EventService } from './event.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { ApiHeader, ApiParam } from '@nestjs/swagger';
+import { UpdateRecurrenceType } from './interfaces/event-update-data.interface';
 
 @Controller('event')
 export class EventController {
@@ -99,11 +100,35 @@ export class EventController {
     required: true,
     description: 'Please include `userId` here',
   })
-  @Delete(':eventId')
+  @ApiParam({
+    name: 'eventId',
+    required: true,
+    description: 'Event id',
+  })
+  @ApiParam({
+    name: 'instanceIndex',
+    required: true,
+    description: 'Event instance index',
+  })
+  @ApiParam({
+    name: 'recurrenceType',
+    required: true,
+    enum: UpdateRecurrenceType,
+    description: 'Event instance index',
+  })
+  @Delete(':eventId/:instanceIndex/:recurrenceType')
   remove(
-    @Param('eventId') eventId: string,
     @Headers('Authorizatoin') authorization: string,
+    @Param('eventId') eventId: string,
+    @Param('instanceIndex') instanceIndexStr: string,
+    @Param('recurrenceType') recurrenceType: UpdateRecurrenceType,
   ) {
-    return this.eventService.remove(authorization, eventId);
+    const instanceIndex = RA.toNumber(instanceIndexStr);
+    return this.eventService.remove(
+      authorization,
+      eventId,
+      instanceIndex,
+      recurrenceType,
+    );
   }
 }
