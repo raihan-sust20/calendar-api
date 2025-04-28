@@ -95,7 +95,14 @@ export class UserService {
     propKey: string,
     propValueList: Array<string> | Array<mongoose.Schema.Types.ObjectId>,
   ): Promise<Array<UserDocument>> {
-    const allUsersDataInDb = await this.userModel.find();
+    const allUsersDataInDb = await this.userModel.find().exec();
+
+    /**
+     * @todo Improve method code to avoid using this if expression.
+     */
+    if (R.isEmpty(propValueList)) {
+      return allUsersDataInDb;
+    }
 
     const userDataInDbList = R.filter((userDataItemInDb: UserDocument) => {
       const propValueInDb = R.prop(propKey, userDataItemInDb);

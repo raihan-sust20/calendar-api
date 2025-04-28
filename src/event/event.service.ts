@@ -5,6 +5,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { DateTime } from 'luxon';
 import * as R from 'ramda';
 import * as RA from 'ramda-adjunct';
+import * as BluebirdPromise from 'bluebird';
 import { Event, EventDocument, RecurrenceType } from './schemas/event.schema';
 import mongoose, { Model } from 'mongoose';
 import { UserService } from 'src/user/user.service';
@@ -35,14 +36,8 @@ export class EventService {
   ) {}
 
   async create(userId: string, createEventDto: CreateEventDto) {
-    const {
-      title,
-      description,
-      startTime,
-      endTime,
-      participants,
-      recurrence,
-    } = createEventDto;
+    const { title, description, startTime, endTime, participants, recurrence } =
+      createEventDto;
 
     /**
      * @todo Consider when given participant email does not exist in DB.
@@ -182,11 +177,11 @@ export class EventService {
     return updatedEventTime;
   }
 
-  private mergeEventUpdateData(
+  private async mergeEventUpdateData(
+    userListInDb: Array<UserDocument>,
     eventInstanceItem: IEventInstance,
-    eventDataInDb: EventDocument,
     eventUpdateDataItem: IEventUpdateData,
-  ): IEventInstance {
+  ): Promise<IEventInstance> {
     const {
       updateData: {
         newParticipants,
@@ -196,19 +191,24 @@ export class EventService {
       },
     } = eventUpdateDataItem;
 
+    console.log('EVent update data item: ', eventUpdateDataItem);
+
     let updatedEventInstance = eventInstanceItem;
+    const { participants: currentParticipantList } = eventInstanceItem;
     if (R.isNotNil(newParticipants) || R.isNotNil(participantsToRemove)) {
-      const updatedParticipantList = this.updateEventParticipants(
+      const updatedParticipantList = await this.updateEventParticipants(
+        userListInDb,
         newParticipants,
         participantsToRemove,
-        eventDataInDb,
+        currentParticipantList,
       );
 
-      updatedEventInstance = R.assoc(
-        'participants',
-        updatedParticipantList,
-        updatedEventInstance,
-      );
+      console.log('UPdated parti list: ', updatedParticipantList);
+      console.log('Evett before new parti: ', updatedEventInstance);
+      updatedEventInstance = R.mergeRight(updatedEventInstance, {
+        participants: updatedParticipantList,
+      });
+      console.log('Event after new parti: ', updatedEventInstance);
     }
 
     if (R.isNotNil(newStartTime) || R.isNotNil(newEndTime)) {
@@ -224,6 +224,7 @@ export class EventService {
     }
 
     updatedEventInstance = R.pipe(
+      R.prop('updateData'),
       R.omit([
         'newParticipants',
         'participantsToRemove',
@@ -231,16 +232,17 @@ export class EventService {
         'newEndTime',
       ]),
       R.mergeRight(updatedEventInstance),
-    )(eventUpdateDataItem.updateData);
+    )(eventUpdateDataItem);
 
     return updatedEventInstance;
   }
 
   private executeEventUpdates = R.curry(
-    (
+    async (
+      userListInDb: Array<UserDocument>,
       eventDataInDb: EventDocument,
       eventInstanceItem: IEventInstance,
-    ): IEventInstance => {
+    ): Promise<IEventInstance> => {
       const { updates: eventUpdateDataList } = eventDataInDb;
 
       const sortedEventUpdateDataList = this.sortEventUpdateDataList(
@@ -248,13 +250,12 @@ export class EventService {
         eventUpdateDataList,
       );
 
-      console.log(
-        'Sorted event updates: ',
-        JSON.stringify(sortedEventUpdateDataList),
-      );
-
-      const updatedEventInstance = R.reduce(
-        (eventUpdateDataItem: IEventUpdateData): IEventInstance => {
+      const updatedEventInstance = await BluebirdPromise.reduce(
+        sortedEventUpdateDataList,
+        async (
+          updateEventInstanceParam: IEventInstance,
+          eventUpdateDataItem: IEventUpdateData,
+        ): Promise<IEventInstance> => {
           const { updateRecurrenceType, index: eventUpdateStartIndex } =
             eventUpdateDataItem;
 
@@ -263,8 +264,8 @@ export class EventService {
           if (updateRecurrenceType === UpdateRecurrenceType.ThisEvent) {
             if (eventInstanceIndex === eventUpdateStartIndex) {
               return this.mergeEventUpdateData(
-                eventInstanceItem,
-                eventDataInDb,
+                userListInDb,
+                updateEventInstanceParam,
                 eventUpdateDataItem,
               );
             }
@@ -272,9 +273,9 @@ export class EventService {
 
           if (updateRecurrenceType === UpdateRecurrenceType.ThisAndFollowing) {
             if (eventInstanceIndex >= eventUpdateStartIndex) {
-              return R.mergeEventUpdateData(
-                eventInstanceItem,
-                eventDataInDb,
+              return this.mergeEventUpdateData(
+                userListInDb,
+                updateEventInstanceParam,
                 eventUpdateDataItem,
               );
             }
@@ -282,16 +283,15 @@ export class EventService {
 
           if (updateRecurrenceType === UpdateRecurrenceType.AllEvents) {
             return this.mergeEventUpdateData(
-              eventInstanceItem,
-              eventDataInDb,
+              userListInDb,
+              updateEventInstanceParam,
               eventUpdateDataItem,
             );
           }
 
-          return eventInstanceItem;
+          return updateEventInstanceParam;
         },
         eventInstanceItem,
-        sortedEventUpdateDataList,
       );
 
       return updatedEventInstance;
@@ -315,11 +315,11 @@ export class EventService {
     return formatedEventInstanceList;
   }
 
-  private getEventInstanceList(
+  private async getEventInstanceList(
     eventDataInDb: Event,
     lastEventTime: string,
-    // executeUpdate: boolean,
-  ): Array<IEventInstance> {
+  ): Promise<Array<IEventInstance>> {
+    const userListInDb = await this.userService.getUsers('email', []);
     const { startTime, endTime, recurrence } = eventDataInDb;
     const firstEventInstance = R.pipe(
       R.pickAll([
@@ -339,8 +339,6 @@ export class EventService {
     let prevEventEndTime = endTime;
     let index = 1;
 
-    console.log('Recurrence day count: ', recurrenceTypeToDay[recurrence]);
-
     while (RA.isFalse(lastEventTimeExceeded)) {
       const currentEventInitialStartTime = add(prevEventStartTime, {
         days: recurrenceTypeToDay[recurrence],
@@ -354,7 +352,8 @@ export class EventService {
         index,
       });
 
-      const updatedEventInstance = this.executeEventUpdates(
+      const updatedEventInstance = await this.executeEventUpdates(
+        userListInDb,
         eventDataInDb,
         currentEventInstance,
       );
@@ -363,20 +362,16 @@ export class EventService {
         updatedEventInstance;
 
       lastEventTimeExceeded = isAfter(currentEventStartTime, lastEventTime);
-      console.log('Current event start time: ', currentEventStartTime);
-      console.log('Last event time: ', lastEventTime);
-      console.log('Last event time exceeded: ', lastEventTimeExceeded);
       index++;
 
       if (RA.isFalse(lastEventTimeExceeded)) {
-        prevEventStartTime = currentEventStartTime;
-        prevEventEndTime = currentEventEndTime;
+        prevEventStartTime = currentEventInitialStartTime;
+        prevEventEndTime = currentEventInitialEndTime;
 
         eventInstanceList = R.append(updatedEventInstance, eventInstanceList);
-        console.log('Event instance list: ', eventInstanceList);
       }
     }
-    console.log('Event instance list: ', eventInstanceList);
+
     const formatedEventInstanceList =
       this.formatEventInstanceData(eventInstanceList);
 
@@ -389,9 +384,21 @@ export class EventService {
       .populate(['createdBy', 'participants'])
       .exec();
 
-    const eventDataWithInstanceList = R.map((eventDataInDbItem: Event) => {
-      return this.getEventInstanceList(eventDataInDbItem, lastEventTime);
-    }, eventDataInDbList);
+    const eventDataWithInstanceList = await BluebirdPromise.map(
+      eventDataInDbList,
+      async (eventDataInDbItem: EventDocument) => {
+        const { _id: eventId } = eventDataInDbItem;
+        const eventInstanceList = await this.getEventInstanceList(
+          eventDataInDbItem,
+          lastEventTime,
+        );
+
+        return {
+          eventId,
+          instanceList: eventInstanceList,
+        };
+      },
+    );
 
     return eventDataWithInstanceList;
   }
@@ -405,14 +412,31 @@ export class EventService {
     return eventDataInDb;
   }
 
+  private getParticipantData(
+    userListInDb: Array<UserDocument>,
+    participantList: Array<string>,
+  ) {
+    const paritcipantDataList = R.filter((userItemInDb: UserDocument) => {
+      const emailInDb = R.prop('email', userItemInDb);
+
+      return R.includes(emailInDb, participantList);
+    }, userListInDb);
+
+    return paritcipantDataList;
+  }
+
   private async updateEventParticipants(
+    userListInDb: Array<UserDocument>,
     newParticipants: Array<string> | undefined,
     participantsToRemove: Array<string> | undefined,
-    eventDataInDb: EventDocument,
+    currentParticipantList: Array<string>,
   ): Promise<Array<User>> {
-    const { participants: participantDataInDbList } = eventDataInDb;
+    const currentParticipantDataInDbList = this.getParticipantData(
+      userListInDb,
+      currentParticipantList,
+    );
 
-    let updatedParticipantList = participantDataInDbList;
+    let updatedParticipantList = currentParticipantDataInDbList;
 
     if (R.isNotNil(participantsToRemove)) {
       updatedParticipantList = R.reject((participantDataInDbItem: User) => {
@@ -424,12 +448,12 @@ export class EventService {
         );
 
         return isParticipantRemovable;
-      })(participantDataInDbList);
+      })(currentParticipantDataInDbList);
     }
 
     if (R.isNotNil(newParticipants)) {
-      const newParticipantDataInDbList = await this.userService.getUsers(
-        'email',
+      const newParticipantDataInDbList = this.getParticipantData(
+        userListInDb,
         newParticipants || [],
       );
 
@@ -539,8 +563,6 @@ export class EventService {
       eventDataInDb,
       updateEventDto,
     );
-
-    console.log('Foramted event data: ', newEventUpdateData);
 
     const updatedEventUpdateList = R.append(
       newEventUpdateData,
