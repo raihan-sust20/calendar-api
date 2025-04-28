@@ -59,7 +59,7 @@ export class EventService {
       title,
       description,
       startTime: set(startTime, { seconds: 0, milliseconds: 0 }).toISOString(),
-      endTime: set(startTime, { seconds: 0, milliseconds: 0 }).toISOString(),
+      endTime: set(endTime, { seconds: 0, milliseconds: 0 }).toISOString(),
       participants: participantIdInDbList,
       createdBy: userId,
       recurrence,
